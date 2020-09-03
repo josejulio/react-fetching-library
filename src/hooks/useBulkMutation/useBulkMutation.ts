@@ -40,7 +40,13 @@ export const useBulkMutation = <T = any, R = {}, S = any>(
   }, [handleAbort]);
 
   const handleQuery = useCallback(
-    async (actionParams: S[]) => {
+    async (
+      actionParams: S[],
+      wrapQueryPromise?: (
+        promiseFn: () => Promise<QueryResponse<T>>,
+        action: Action<T, R>,
+      ) => Promise<QueryResponse<T>>,
+    ) => {
       if (!isMounted.current) {
         return Array.from(Array(10).keys()).map(() => ({
           error: false,
@@ -63,7 +69,11 @@ export const useBulkMutation = <T = any, R = {}, S = any>(
         loading: true,
       }));
 
-      const queryResponses: Array<QueryResponse<T>> = await Promise.all(actions.map(action => query<T>(action)));
+      const queryPromiseWrapper = wrapQueryPromise || (promiseFn => promiseFn());
+
+      const queryResponses: Array<QueryResponse<T>> = await Promise.all(
+        actions.map(action => queryPromiseWrapper(() => query<T>(action), action)),
+      );
 
       if (isMounted.current) {
         setState({

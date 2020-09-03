@@ -112,6 +112,78 @@ describe('useBulkMutation test', () => {
     expect(state.responses).toHaveLength(0);
   });
 
+  it('allows to define a promise wrapper to implement things like throttling', async () => {
+    jest.useFakeTimers();
+
+    let state: any = {};
+
+    renderHook(
+      () => {
+        state = useBulkMutation(actionCreator);
+      },
+      {
+        wrapper,
+      },
+    );
+
+    expect(state.loading).toEqual(false);
+    expect(state.responses).toHaveLength(0);
+
+    const resolvers = {
+      foo: jest.fn(),
+      bar: jest.fn()
+    };
+
+    act(() => {
+      state.mutate(['foo', 'bar'], (promiseFn: any, action: any) => {
+        return new Promise((resolver) => {
+          if (action.endpoint === 'foo') {
+            resolvers.foo.mockImplementation(() => resolver(promiseFn()));
+          } else if (action.endpoint === 'bar') {
+            resolvers.bar.mockImplementation(() => resolver(promiseFn()));
+          }
+        });
+      });
+    });
+
+    expect(state.loading).toEqual(true);
+    expect(actionCreator).toHaveBeenCalledWith('foo');
+    expect(actionCreator).toHaveBeenCalledWith('bar');
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(state.loading).toEqual(true);
+
+    act(() => {
+      resolvers.bar();
+      jest.runAllTimers();
+    });
+
+    expect(state.loading).toEqual(true);
+
+    act(() => {
+      resolvers.foo();
+      jest.runAllTimers();
+    });
+
+    expect(state.loading).toEqual(false);
+    expect(state.responses).toHaveLength(2);
+    expect(state.responses[0].payload).toEqual({
+      foo: 'foo',
+    });
+    expect(state.responses[1].payload).toEqual({
+      foo: 'bar',
+    });
+
+    act(() => {
+      state.reset();
+    });
+
+    expect(state.responses).toHaveLength(0);
+  });
+
   it('skips changing state after unmount', async () => {
     jest.useFakeTimers();
 
